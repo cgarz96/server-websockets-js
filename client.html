@@ -1,0 +1,84 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cliente WebSocket con Canales</title>
+</head>
+<body>
+    <h1>Conexión WebSocket - Canales</h1>
+    <div>
+        <p>Estado: <span id="status">Desconectado</span></p>
+        <textarea id="messages" rows="10" cols="50" readonly></textarea><br>
+
+        <!-- Formularios de unirse a canal y enviar mensaje -->
+        <input type="text" id="channelInput" placeholder="Nombre del canal">
+        <button id="joinChannel">Unirse al canal</button><br>
+
+        <input type="text" id="messageInput" placeholder="Escribe un mensaje">
+        <button id="sendMessage">Enviar mensaje</button>
+    </div>
+
+    <script>
+        // Crea la conexión WebSocket
+        //const socket = new WebSocket('ws://10.200.40.206:8080');
+        const socket = new WebSocket('wss://websocket.osunlar.org/?token=@sunl@r26');
+
+        // Elementos de la interfaz de usuario
+        const statusEl = document.getElementById('status');
+        const messagesEl = document.getElementById('messages');
+        const channelInput = document.getElementById('channelInput');
+        const messageInput = document.getElementById('messageInput');
+        const joinChannelButton = document.getElementById('joinChannel');
+        const sendMessageButton = document.getElementById('sendMessage');
+
+        // Cuando la conexión se abre
+        socket.onopen = () => {
+            statusEl.textContent = 'Conectado';
+        };
+
+        // Cuando el servidor envía un mensaje
+        socket.onmessage = (event) => {
+            const newMessage = event.data;
+            messagesEl.value += `Servidor: ${newMessage}\n`;
+        };
+
+        // Cuando ocurre un error
+        socket.onerror = (error) => {
+            console.error('Error en WebSocket', error);
+        };
+
+        // Cuando se cierra la conexión
+        socket.onclose = () => {
+            statusEl.textContent = 'Desconectado';
+        };
+
+        // Unirse a un canal
+        joinChannelButton.onclick = () => {
+            const channel = channelInput.value;
+            if (channel) {
+                const joinMessage = {
+                    type: 'join',
+                    channel: channel
+                };
+                socket.send(JSON.stringify(joinMessage));
+            }
+        };
+
+        // Enviar un mensaje al canal
+        sendMessageButton.onclick = () => {
+            const message = messageInput.value;
+            if (message) {
+                const messageObj = {
+                    type: 'message',
+                    message: message
+                };
+                socket.send(JSON.stringify(messageObj));
+                messagesEl.value += `Tú: ${message}\n`;
+                messageInput.value = ''; // Limpiar el campo de texto
+            }
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  websocket-server:
+    build: .
+    container_name: serverwebsocketsjs
+    ports:
+      - "8765:8080"
+    volumes:
+      - .:/app            # Mapea todo el directorio actual a /app en el contenedor
+      - /app/node_modules # Evita que los nodos_modules locales sobrescriban los del contenedor
+    restart: always
