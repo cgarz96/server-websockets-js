@@ -1,97 +1,97 @@
 // server.js
 const WebSocket = require('ws');
-
 const url = require('url');
-// Crea el servidor WebSocket
-
 
 const wss = new WebSocket.Server({ 
     host: '0.0.0.0', 
     port: 8080,
-        // Verificación antes de aceptar la conexión  
-        verifyClient: (info, callback) => {
+    verifyClient: (info, callback) => {
         const location = url.parse(info.req.url, true);
         const token = location.query.token;
-
-        // AQUÍ VALIDAS EL TOKEN (puedes compararlo con una DB o un string)
         const TOKEN_VALIDO = "@sunl@r26";
 
         if (token === TOKEN_VALIDO) {
-            callback(true); // Acepta la conexión     
-            } else {
-            console.log('Intento de conexión fallido: Token inválido');
-            callback(false, 401, 'Unauthorized'); // Rechaza la conexión   
-            }
+            callback(true);
+        } else {
+            callback(false, 401, 'Unauthorized');
+        }
     }
 });
 
-// Objeto para almacenar los clientes por canal
 const channels = {};
 
-wss.on('connection', (ws,req) => {
-  
-  const ip = req.socket.remoteAddress;
-  console.log('Nuevo cliente conectado desde IP:',ip);
-  // Variable para saber a qu\Uffffffffanal est\Uffffffffuscrito el cliente
-  let currentChannel = null;
+const sendJson = (ws, data) => {
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(data));
+    }
+};
 
-  // Cuando el cliente env\Uffffffffun mensaje
-  ws.on('message', (message) => {
-    const parsedMessage = JSON.parse(message);
+wss.on('connection', (ws, req) => {
+    const ip = req.socket.remoteAddress;
+    // Guardamos el nombre de usuario en el objeto del socket
+    ws.userName = "Anónimo"; 
 
-    if (parsedMessage.type === 'join') {
-      // El cliente quiere unirse a un canal
-      const channel = parsedMessage.channel;
+    sendJson(ws, { type: 'info', message: 'Conectado exitosamente.' });
 
-      if (!channels[channel]) {
-        channels[channel] = [];
-      }
-      console.log(channels)
-      // Si ya est\Uffffffffn un canal anterior, lo quitamos de ese canal
-      if (currentChannel && channels[currentChannel]) {
-        channels[currentChannel] = channels[currentChannel].filter(client => client !== ws);
-      }
+    ws.on('message', (message) => {
+        try {
+            const parsedMessage = JSON.parse(message);
 
-      // Agregar al cliente al canal nuevo
-      channels[channel].push(ws);
-      currentChannel = channel;
+            // 1. Lógica de UNIRSE (JOIN)
+            if (parsedMessage.type === 'join') {
+                const channel = parsedMessage.channel;
+                
+                // Si el mensaje incluye un nombre de usuario, lo guardamos
+                if (parsedMessage.user) {
+                    ws.userName = parsedMessage.user;
+                }
 
-      ws.send(`Te has unido al canal: ${channel}`);
-      console.log(`Cliente se uni\Uffffffff canal: ${channel}`);
-    } else if (parsedMessage.type === 'message' && currentChannel) {
-      // El cliente est\Uffffffffnviando un mensaje a su canal actual
-      const messageContent = parsedMessage.message;
-      console.log(`Mensaje en canal ${currentChannel}: ${messageContent}`);
+                if (!channels[channel]) channels[channel] = [];
 
-      // Enviar el mensaje a todos los clientes del canal
-      channels[currentChannel].forEach(client => {
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-          client.send(`${currentChannel}: ${messageContent}`);
+                if (currentChannel && channels[currentChannel]) {
+                    channels[currentChannel] = channels[currentChannel].filter(client => client !== ws);
+                }
+
+                channels[channel].push(ws);
+                currentChannel = channel;
+
+                sendJson(ws, {
+                    type: 'system',
+                    action: 'join_success',
+                    channel: channel,
+                    user: ws.userName,
+                    message: `Te has unido como ${ws.userName}`
+                });
+
+            // 2. Lógica de MENSAJE (MESSAGE)
+            } else if (parsedMessage.type === 'message' && currentChannel) {
+                // Si envían un usuario en el mensaje de chat, actualizamos (opcional)
+                const senderName = parsedMessage.user || ws.userName;
+
+                channels[currentChannel].forEach(client => {
+                    if (client !== ws) {
+                        sendJson(client, {
+                            type: 'chat',
+                            channel: currentChannel,
+                            user: senderName, // Aquí va el nombre (Anónimo o el real)
+                            message: parsedMessage.message,
+                            timestamp: new Date().toLocaleTimeString()
+                        });
+                    }
+                });
+            }
+        } catch (error) {
+            sendJson(ws, { type: 'error', message: 'Error en el formato JSON' });
         }
-      });
-    }
-  });
-
-  // Cuando el cliente se desconecta
-  ws.on('close', () => {
-    if (currentChannel && channels[currentChannel]) {
-      // Eliminar al cliente del canal
-      channels[currentChannel] = channels[currentChannel].filter(client => client !== ws);
-      console.log(`Cliente desconectado del canal: ${currentChannel}`);
-    }
-  });
-
-  // Enviar un mensaje de bienvenida al cliente
-  ws.send('Bienvenido al servidor WebSocket.');
-  //ws.send('Bienvenido al servidor WebSocket. \Uffffffffete a un canal con el comando "join".');
-});
-// Ping peri\Uffffffffo a cada cliente para mantener la conexi\Uffffffffiva
-setInterval(() => {
-    wss.clients.forEach((ws) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.ping(); // Enviar un "ping"
-      }
     });
-}, 30000); // cada 30 segundos
-// Informar que el servidor est\Ufffffffforriendo
-console.log('Servidor WebSocket escuchando en ws://localhost:8080');
+
+    let currentChannel = null;
+
+    ws.on('close', () => {
+        if (currentChannel && channels[currentChannel]) {
+            channels[currentChannel] = channels[currentChannel].filter(client => client !== ws);
+        }
+    });
+});
+
+console.log('Servidor WebSocket JSON activo en puerto 8080');
