@@ -27,7 +27,14 @@ const sendJson = (ws, data) => {
 };
 
 wss.on('connection', (ws, req) => {
-    const ip = req.socket.remoteAddress;
+    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    ws.clientData = {
+        ip: ip,
+        device: userAgent, // Aquí viene el string del navegador/SO
+        connectedAt: new Date().toISOString(),
+    };
+
     // Guardamos el nombre de usuario en el objeto del socket
     ws.userName = "Anónimo"; 
 
@@ -45,7 +52,9 @@ wss.on('connection', (ws, req) => {
                 if (parsedMessage.user) {
                     ws.userName = parsedMessage.user;
                 }
-
+                if (parsedMessage.userId) {
+                    ws.userId = parsedMessage.userId;
+                }
                 if (!channels[channel]) channels[channel] = [];
 
                 if (currentChannel && channels[currentChannel]) {
@@ -63,7 +72,22 @@ wss.on('connection', (ws, req) => {
                     message: `Te has unido como ${ws.userName}`
                 });
 
-            // 2. Lógica de MENSAJE (MESSAGE)
+            // 2. Lógica de Listado de USUARIOS (GET_USERS)
+            }else if (parsedMessage.type === 'get_global_users') {
+                const allUsers = Array.from(wss.clients).map(client => ({
+                    user: client.userName || "Anónimo",
+                    channel: client.currentChannelName || "Ninguno",
+                    ip: client.clientData.ip,
+                    device: client.clientData.device,
+                    since: client.clientData.connectedAt
+                }));
+
+                sendJson(ws, {
+                    type: 'system',
+                    action: 'global_user_list',
+                    users: allUsers
+                });
+            // 3. Lógica de MENSAJE (MESSAGE)
             } else if (parsedMessage.type === 'message' && currentChannel) {
                 // Si envían un usuario en el mensaje de chat, actualizamos (opcional)
                 const senderName = parsedMessage.user || ws.userName;
