@@ -24,8 +24,22 @@ const sendJson = (ws, data) => {
         ws.send(JSON.stringify(data));
     }
 };
+function heartbeat() {
+    this.isAlive = true;
+}
+
+const interval = setInterval(function ping() {
+    wss.clients.forEach(function each(ws) {
+        if (ws.isAlive === false) return ws.terminate(); // Si no respondió al ping anterior, desconectar
+
+        ws.isAlive = false;
+        ws.ping(); // Envía un "ping" (el navegador responde "pong" automáticamente)
+    });
+}, 30000); // Cada 30 segundos
 
 wss.on('connection', (ws, req) => {
+    ws.isAlive = true;
+    ws.on('pong', heartbeat); // Al recibir respuesta, lo marcamos como vivo
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
     
