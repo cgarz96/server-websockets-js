@@ -24,6 +24,33 @@ const sendJson = (ws, data) => {
         ws.send(JSON.stringify(data));
     }
 };
+/**
+ * Obtiene la lista actual de todos los usuarios conectados
+ */
+const getGlobalUserList = () => {
+    return Array.from(wss.clients).map(client => ({
+        user: client.userName || "Anónimo",
+        userId: client.userId || null,
+        channels: Array.from(client.subscribedChannels || []), 
+        ip: client.clientData?.ip,
+        since: client.clientData?.connectedAt
+    }));
+};
+
+/**
+ * Envía la lista actualizada a TODOS los usuarios conectados
+ */
+const broadcastUserList = () => {
+    const users = getGlobalUserList();
+    wss.clients.forEach(client => {
+        sendJson(client, { 
+            type: 'system', 
+            action: 'global_user_list', 
+            users: users 
+        });
+    });
+};
+// --- GESTIÓN DE HEARTBEAT (Mantener conexión viva) ---
 function heartbeat() {
     this.isAlive = true;
 }
@@ -36,6 +63,8 @@ const interval = setInterval(function ping() {
         ws.ping(); // Envía un "ping" (el navegador responde "pong" automáticamente)
     });
 }, 30000); // Cada 30 segundos
+
+
 
 wss.on('connection', (ws, req) => {
     ws.isAlive = true;
@@ -88,16 +117,16 @@ wss.on('connection', (ws, req) => {
 
             // 2. LISTADO GLOBAL (Muestra todos los canales de cada usuario)
             } else if (parsedMessage.type === 'get_global_users') {
-                const allUsers = Array.from(wss.clients).map(client => ({
+                /*const allUsers = Array.from(wss.clients).map(client => ({
                     user: client.userName,
                     userId: client.userId,
                     // Convertimos el Set a Array para el JSON
                     channels: Array.from(client.subscribedChannels), 
                     ip: client.clientData?.ip,
                     since: client.clientData?.connectedAt
-                }));
+                }));*/
 
-                sendJson(ws, { type: 'system', action: 'global_user_list', users: allUsers });
+                sendJson(ws, { type: 'system', action: 'global_user_list', users: getGlobalUserList() });
 
             // 3. ENVIAR MENSAJE A UN CANAL ESPECÍFICO
             } else if (parsedMessage.type === 'message') {
@@ -135,7 +164,11 @@ wss.on('connection', (ws, req) => {
             }
         });
         console.log(`Cliente ${ws.userName} desconectado.`);
+        // ENVIAR LISTA ACTUALIZADA A LOS QUE QUEDAN
+        broadcastUserList();
     });
 });
-
+wss.on('close', () => {
+    clearInterval(interval);
+});
 console.log('Servidor Multi-Canal activo en puerto 8080');
