@@ -85,6 +85,8 @@ wss.on('connection', (ws, req) => {
     ws.subscribedChannels = new Set(); 
 
     sendJson(ws, { type: 'info', message: 'Conectado exitosamente a OSUWebSocket.' });
+    // Notificamos a TODOS (incluyendo al nuevo) la lista actualizada
+    broadcastUserList();
 
     ws.on('message', (message) => {
         try {
